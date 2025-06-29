@@ -1,0 +1,127 @@
+<!-- Multiplayer 2D Shooter Game (Socket.IO) -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multiplayer 2D Shooter</title>
+  <style>
+    html, body { margin: 0; padding: 0; overflow: hidden; background: #111; }
+    canvas { display: block; width: 100vw; height: 100vh; background: #222; }
+    .ui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-family: sans-serif;
+    }
+    .health-bar {
+      width: 150px;
+      height: 15px;
+      background: #333;
+      border: 1px solid #fff;
+      margin-bottom: 10px;
+    }
+    .health-inner {
+      height: 100%;
+      background: lime;
+      transition: width 0.3s;
+    }
+  </style>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <div class="ui">
+    <div class="health-bar"><div class="health-inner" id="playerHealth"></div></div>
+    Kills: <span id="killCount">0</span>
+  </div>
+  <audio id="fireSound" src="fire.mp3"></audio>
+
+  <script>
+    const socket = io();
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const fireSound = document.getElementById('fireSound');
+    const healthDisplay = document.getElementById('playerHealth');
+    const killDisplay = document.getElementById('killCount');
+
+    let playerId = null;
+    const players = {};
+    const bullets = [];
+
+    const keys = {};
+    document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+    document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+    document.addEventListener('mousedown', e => {
+      if (e.button === 0) {
+        socket.emit('shoot', {});
+        fireSound.currentTime = 0;
+        fireSound.play();
+      }
+    });
+
+    function sendMovement() {
+      socket.emit('move', keys);
+    }
+
+    socket.on('init', id => {
+      playerId = id;
+    });
+
+    socket.on('state', state => {
+      for (const id in state.players) {
+        players[id] = state.players[id];
+      }
+      bullets.length = 0;
+      state.bullets.forEach(b => bullets.push(b));
+    });
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw players
+      for (const id in players) {
+        const p = players[id];
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.angle);
+        ctx.fillStyle = id === playerId ? 'lime' : 'blue';
+        ctx.fillRect(-10, -10, 20, 20);
+        ctx.restore();
+
+        // Draw name
+        ctx.fillStyle = 'white';
+        ctx.font = '12px sans-serif';
+        ctx.fillText(p.name, p.x - 15, p.y - 20);
+      }
+
+      // Draw bullets
+      bullets.forEach(b => {
+        ctx.fillStyle = b.owner === playerId ? 'red' : 'yellow';
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Update health and kills
+      const me = players[playerId];
+      if (me) {
+        healthDisplay.style.width = `${me.health}%`;
+        killDisplay.textContent = me.kills;
+      }
+    }
+
+    function gameLoop() {
+      sendMovement();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
