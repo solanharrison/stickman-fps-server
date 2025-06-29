@@ -39,7 +39,7 @@
   <audio id="fireSound" src="fire.mp3"></audio>
 
   <script>
-    const socket = io();
+    const socket = io('https://stickman-fps-server.onrender.com');
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     canvas.width = window.innerWidth;
