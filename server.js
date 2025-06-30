@@ -1,14 +1,18 @@
-// server.js (Node.js + Express + Socket.IO)
+// server.js
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: {
-    origin: "*"
-  }
+  cors: { origin: "*" }
+});
+
+app.use(express.static(path.join(__dirname, 'public')));
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 const players = {};
@@ -32,14 +36,21 @@ io.on('connection', (socket) => {
 
   socket.emit('init', socket.id);
 
-  socket.on('move', (keys) => {
+  socket.on('move', ({ keys, angle }) => {
     const p = players[socket.id];
     if (!p) return;
-    let speed = 2;
+
+    p.angle = angle; // ✅ Update player direction
+
+    const speed = 3;
     if (keys['w']) p.y -= speed;
     if (keys['s']) p.y += speed;
     if (keys['a']) p.x -= speed;
     if (keys['d']) p.x += speed;
+
+    // ✅ Stay inside canvas
+    p.x = Math.max(10, Math.min(1590, p.x));
+    p.y = Math.max(10, Math.min(1190, p.y));
   });
 
   socket.on('shoot', () => {
@@ -66,6 +77,7 @@ setInterval(() => {
     b.x += Math.cos(b.angle) * 5;
     b.y += Math.sin(b.angle) * 5;
 
+    // Check collision with players
     for (const id in players) {
       if (id !== b.owner) {
         const p = players[id];
@@ -85,16 +97,13 @@ setInterval(() => {
       }
     }
 
-    // Remove if off screen
+    // Remove bullets off canvas
     if (b.x < 0 || b.x > 1600 || b.y < 0 || b.y > 1200) {
       bullets.splice(i, 1);
     }
   }
 
-  io.emit('state', {
-    players,
-    bullets
-  });
+  io.emit('state', { players, bullets });
 }, 1000 / 30);
 
 const port = process.env.PORT || 3000;
