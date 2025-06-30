@@ -1,19 +1,28 @@
-<!-- Multiplayer 2D Shooter Game (Socket.IO) -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Multiplayer 2D Shooter</title>
+  <title>Multiplayer Shooter</title>
   <style>
-    html, body { margin: 0; padding: 0; overflow: hidden; background: #111; }
-    canvas { display: block; width: 100vw; height: 100vh; background: #222; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #111;
+    }
+    canvas {
+      display: block;
+      background: #222;
+      cursor: crosshair;
+    }
     .ui {
       position: absolute;
       top: 10px;
       left: 10px;
       color: white;
       font-family: sans-serif;
+      z-index: 1;
     }
     .health-bar {
       width: 150px;
@@ -25,25 +34,35 @@
     .health-inner {
       height: 100%;
       background: lime;
-      transition: width 0.3s;
+      transition: width 0.2s;
     }
   </style>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
   <canvas id="gameCanvas"></canvas>
+
   <div class="ui">
-    <div class="health-bar"><div class="health-inner" id="playerHealth"></div></div>
+    <div class="health-bar">
+      <div class="health-inner" id="playerHealth"></div>
+    </div>
     Kills: <span id="killCount">0</span>
   </div>
+
   <audio id="fireSound" src="fire.mp3"></audio>
 
   <script>
-    const socket = io('https://stickman-fps-server.onrender.com');
+    const socket = io();
+
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+
+    const resizeCanvas = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
 
     const fireSound = document.getElementById('fireSound');
     const healthDisplay = document.getElementById('playerHealth');
@@ -52,20 +71,33 @@
     let playerId = null;
     const players = {};
     const bullets = [];
-
     const keys = {};
+
     document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
     document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+    let mouseX = canvas.width / 2;
+    let mouseY = canvas.height / 2;
+
+    document.addEventListener('mousemove', e => {
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+    });
+
     document.addEventListener('mousedown', e => {
       if (e.button === 0) {
         socket.emit('shoot', {});
         fireSound.currentTime = 0;
-        fireSound.play();
+        fireSound.play().catch(() => {});
       }
     });
 
     function sendMovement() {
-      socket.emit('move', keys);
+      const angle = Math.atan2(
+        mouseY - canvas.height / 2,
+        mouseX - canvas.width / 2
+      );
+      socket.emit('move', { keys, angle });
     }
 
     socket.on('init', id => {
@@ -83,23 +115,42 @@
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Draw players
+      // Crosshair
+      ctx.strokeStyle = "#fff";
+      ctx.beginPath();
+      ctx.moveTo(mouseX - 10, mouseY);
+      ctx.lineTo(mouseX + 10, mouseY);
+      ctx.moveTo(mouseX, mouseY - 10);
+      ctx.lineTo(mouseX, mouseY + 10);
+      ctx.stroke();
+
+      // Players
       for (const id in players) {
         const p = players[id];
         ctx.save();
         ctx.translate(p.x, p.y);
         ctx.rotate(p.angle);
+
+        // Player body
         ctx.fillStyle = id === playerId ? 'lime' : 'blue';
         ctx.fillRect(-10, -10, 20, 20);
+
+        // Aim direction line
+        ctx.strokeStyle = 'white';
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(20, 0);
+        ctx.stroke();
+
         ctx.restore();
 
-        // Draw name
+        // Name
         ctx.fillStyle = 'white';
         ctx.font = '12px sans-serif';
         ctx.fillText(p.name, p.x - 15, p.y - 20);
       }
 
-      // Draw bullets
+      // Bullets
       bullets.forEach(b => {
         ctx.fillStyle = b.owner === playerId ? 'red' : 'yellow';
         ctx.beginPath();
@@ -107,7 +158,6 @@
         ctx.fill();
       });
 
-      // Update health and kills
       const me = players[playerId];
       if (me) {
         healthDisplay.style.width = `${me.health}%`;
