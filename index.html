@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Multiplayer Shooter</title>
+  <title>Stickman FPS</title>
   <style>
     html, body {
       margin: 0;
@@ -36,6 +36,20 @@
       background: lime;
       transition: width 0.2s;
     }
+    .leaderboard {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 180px;
+      padding: 8px;
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid #fff;
+      color: white;
+      font-family: sans-serif;
+      font-size: 14px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
   </style>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
@@ -49,24 +63,33 @@
     Kills: <span id="killCount">0</span>
   </div>
 
+  <div class="leaderboard" id="leaderboard">
+    <strong>🏆 Leaderboard</strong>
+    <ul id="leaderList" style="padding-left: 18px; margin: 5px 0 0;"></ul>
+  </div>
+
   <audio id="fireSound" src="fire.mp3"></audio>
 
   <script>
     const socket = io();
-
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
+    const dpi = window.devicePixelRatio || 1;
 
-    const resizeCanvas = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
+    function resizeCanvas() {
+      canvas.width = window.innerWidth * dpi;
+      canvas.height = window.innerHeight * dpi;
+      canvas.style.width = window.innerWidth + 'px';
+      canvas.style.height = window.innerHeight + 'px';
+    }
+
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
 
     const fireSound = document.getElementById('fireSound');
     const healthDisplay = document.getElementById('playerHealth');
     const killDisplay = document.getElementById('killCount');
+    const leaderboardEl = document.getElementById('leaderList');
 
     let playerId = null;
     const players = {};
@@ -94,8 +117,8 @@
 
     function sendMovement() {
       const angle = Math.atan2(
-        mouseY - canvas.height / 2,
-        mouseX - canvas.width / 2
+        mouseY - window.innerHeight / 2,
+        mouseX - window.innerWidth / 2
       );
       socket.emit('move', { keys, angle });
     }
@@ -110,10 +133,26 @@
       }
       bullets.length = 0;
       state.bullets.forEach(b => bullets.push(b));
+      updateLeaderboard();
     });
 
+    function updateLeaderboard() {
+      const sorted = Object.values(players)
+        .sort((a, b) => b.kills - a.kills)
+        .slice(0, 5);
+
+      leaderboardEl.innerHTML = '';
+      for (const p of sorted) {
+        const item = document.createElement('li');
+        item.textContent = `${p.name} - ${p.kills}`;
+        leaderboardEl.appendChild(item);
+      }
+    }
+
     function draw() {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.scale(dpi, dpi);
 
       // Crosshair
       ctx.strokeStyle = "#fff";
@@ -124,18 +163,16 @@
       ctx.lineTo(mouseX, mouseY + 10);
       ctx.stroke();
 
-      // Players
+      // Draw players
       for (const id in players) {
         const p = players[id];
         ctx.save();
         ctx.translate(p.x, p.y);
         ctx.rotate(p.angle);
-
-        // Player body
         ctx.fillStyle = id === playerId ? 'lime' : 'blue';
         ctx.fillRect(-10, -10, 20, 20);
 
-        // Aim direction line
+        // direction pin
         ctx.strokeStyle = 'white';
         ctx.beginPath();
         ctx.moveTo(0, 0);
@@ -144,7 +181,7 @@
 
         ctx.restore();
 
-        // Name
+        // name
         ctx.fillStyle = 'white';
         ctx.font = '12px sans-serif';
         ctx.fillText(p.name, p.x - 15, p.y - 20);
